@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skill Match & Career Navigator Quiz</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; }
+        .card { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05); }
+        .pdf-content { padding: 20px; background-color: white; border-radius: 12px; }
+        /* Custom scrollbar for output */
+        #results-container::-webkit-scrollbar { width: 6px; }
+        #results-container::-webkit-scrollbar-thumb { background-color: #6366f1; border-radius: 3px; }
+        #results-container::-webkit-scrollbar-track { background: #e0e7ff; }
+        
+        .quiz-option {
+            cursor: pointer;
+            transition: all 0.15s ease-in-out;
+        }
+        .quiz-option:hover {
+            background-color: #e0e7ff; /* indigo-100 */
+        }
+        .selected {
+            border-color: #4f46e5 !important; /* indigo-600 */
+            background-color: #e0e7ff; /* indigo-100 */
+        }
+        .correct-answer {
+            background-color: #d1fae5; /* green-100 */
+            border-color: #059669 !important; /* green-600 */
+        }
+        .incorrect-answer {
+            background-color: #fee2e2; /* red-100 */
+            border-color: #ef4444 !important; /* red-600 */
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 min-h-screen flex items-start justify-center">
+
+    <div class="w-full max-w-4xl pt-10">
+        <header class="text-center mb-10">
+            <h1 class="text-4xl font-extrabold text-gray-800 tracking-tight">Skill Match & Career Navigator</h1>
+            <p class="text-lg text-gray-500 mt-2">Find out if you're ready for your dream job and what to study next.</p>
+        </header>
+
+        <div class="card bg-white p-6 md:p-10 rounded-2xl border border-gray-100">
+
+            <!-- Input Fields -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label for="job-role" class="block text-sm font-medium text-gray-700 mb-2">Target Job Role (e.g., Math Lecturer)</label>
+                    <input type="text" id="job-role" placeholder="e.g., Senior Data Scientist" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150" value="Math Lecturer">
+                </div>
+                <div></div>
+            </div>
+
+            <div class="mt-6">
+                <label for="user-input" class="block text-sm font-medium text-gray-700 mb-2">Your Skills and Background</label>
+                <textarea id="user-input" rows="5" placeholder="e.g., I am highly skilled in probability, graph theory, and abstract algebra. I have 5 years of experience teaching at the university level." class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 resize-none">I am proficient in probability, linear algebra, and discrete mathematics. I also have basic knowledge of differential equations.</textarea>
+            </div>
+
+            <!-- Analyze Button -->
+            <button id="analyze-button" class="w-full mt-8 py-3 px-6 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition duration-200 focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50 flex items-center justify-center" onclick="analyzePlacement()">
+                <svg id="button-icon" class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                <span id="button-text">Analyze My Fit</span>
+            </button>
+
+            <!-- Loading Indicator -->
+            <div id="loading-indicator" class="mt-8 hidden text-center">
+                <div class="animate-spin inline-block w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full"></div>
+                <p class="mt-2 text-indigo-600 font-medium">Analyzing skills and preparing assessment...</p>
+            </div>
+
+            <!-- Results Container -->
+            <div id="results-container" class="mt-10 p-6 bg-indigo-50 border border-indigo-200 rounded-xl hidden max-h-fit overflow-y-auto">
+                <h2 class="text-2xl font-bold text-indigo-800 mb-4">Skill Comparison</h2>
+                <div id="comparison-output" class="mb-6 text-gray-700">
+                    <!-- Comparison and progress bars rendered here -->
+                </div>
+                
+                <!-- Quiz Call to Action -->
+                <div id="quiz-cta" class="p-4 bg-red-100 border border-red-300 rounded-lg hidden">
+                    <p class="text-xl font-bold text-red-700">⚠️ Skill Gap Detected! Time for a quick assessment.</p>
+                    <p class="mt-2 text-red-600">Take this 10-question quiz to test your current foundational knowledge in the missing areas and get your first skill score!</p>
+                </div>
+            </div>
+            
+            <!-- Quiz Container -->
+            <div id="quiz-container" class="mt-10 p-6 bg-white border border-gray-200 rounded-xl hidden">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4" id="quiz-title">Skill Assessment Quiz</h2>
+                <div id="quiz-questions-list" class="space-y-6">
+                    <!-- Quiz questions rendered here -->
+                </div>
+                <button id="submit-quiz-button" class="w-full mt-8 py-3 px-6 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition duration-200 focus:outline-none focus:ring-4 focus:ring-green-500 focus:ring-opacity-50 flex items-center justify-center" onclick="submitQuiz()">
+                    Submit Quiz & See Progress
+                </button>
+            </div>
+            
+            <!-- Quiz Results / Rationale Container -->
+            <div id="quiz-results-container" class="mt-10 p-6 bg-white border border-gray-200 rounded-xl hidden">
+                <h2 class="text-2xl font-bold text-indigo-800 mb-4">Quiz Review & Rationale</h2>
+                <div id="rationale-output" class="space-y-4">
+                    <!-- Rationale displayed here -->
+                </div>
+            </div>
+
+            <button id="download-pdf-button" class="w-full mt-4 py-3 px-6 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition duration-200 focus:outline-none focus:ring-4 focus:ring-red-500 focus:ring-opacity-50 flex items-center justify-center hidden" onclick="downloadPDF()">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Download Analysis as PDF
+            </button>
+            
+        </div>
+    </div>
+
+    <script>
+        const API_URL_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent';
+        const apiKey = "AIzaSyCOTvp9jKWFvNgaVuAeLslgrxqJ9Jh3Z8c";
+        
+        // Global storage for quiz data and skill progress
+        let currentQuizData = null;
+        let progressData = {}; // Stores {skillName: percentage, ...}
+        
+        // --- Utility Functions ---
+
+        async function fetchWithRetry(url, options, retries = 3) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.ok) {
+                        return response;
+                    }
+                    if (response.status === 429 && i < retries - 1) { 
+                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue;
+                    }
+                    throw new Error(`API request failed with status ${response.status}: ${await response.text()}`);
+                } catch (error) {
+                    if (i === retries - 1) {
+                        console.error("Fetch failed after all retries:", error);
+                        throw error;
+                    }
+                    const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+
+        /**
+         * Renders the skills comparison block with progress bars.
+         */
+        function renderComparison(jobRole, requiredSkills, extractedUserSkills) {
+            const comparisonOutput = document.getElementById('comparison-output');
+            
+            // Initialize progress data for all required skills (0% for missing, 100% for extracted)
+            requiredSkills.forEach(skill => {
+                const isExtracted = extractedUserSkills.some(userSkill => 
+                    userSkill.toLowerCase().includes(skill.toLowerCase()) || 
+                    skill.toLowerCase().includes(userSkill.toLowerCase())
+                );
+                // Only initialize if not already scored by quiz
+                if (!(skill in progressData)) {
+                    progressData[skill] = isExtracted ? 100 : 0;
+                }
+            });
+
+            let requiredHtml = requiredSkills.map(skill => {
+                const progress = progressData[skill] || 0;
+                const progressColor = progress === 100 ? 'bg-green-500' : 
+                                      progress > 0 ? 'bg-indigo-500' : 'bg-gray-300';
+                
+                return `
+                    <li class="ml-4 flex justify-between items-center py-1">
+                        <span class="text-gray-700">${skill}</span>
+                        <div class="w-1/3 bg-gray-200 rounded-full h-2.5">
+                            <div id="progress-${skill.replace(/\s/g, '-')}" class="h-2.5 rounded-full transition-all duration-500 ${progressColor}" style="width: ${progress}%"></div>
+                            <span class="text-xs text-gray-500 float-right mt-1">${progress}%</span>
+                        </div>
+                    </li>
+                `;
+            }).join('');
+
+            let extractedHtml = extractedUserSkills.map(skill => `<li class="ml-4 py-1 text-gray-700">${skill}</li>`).join('');
+
+            comparisonOutput.innerHTML = `
+                <div class="mb-4">
+                    <p class="font-bold text-lg text-indigo-700">Target Job: ${jobRole}</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="p-3 bg-white rounded-lg border border-gray-200">
+                        <h3 class="font-semibold text-gray-800 mb-2">Required Skills & Current Progress</h3>
+                        <ul class="list-disc list-inside space-y-1">${requiredHtml}</ul>
+                    </div>
+                    <div class="p-3 bg-white rounded-lg border border-gray-200">
+                        <h3 class="font-semibold text-gray-800 mb-2">Your Extracted Skills</h3>
+                        <ul class="list-disc list-inside space-y-1">${extractedHtml || '<li class="ml-4 text-gray-500">None explicitly mentioned.</li>'}</ul>
+                    </div>
+                </div>
+            `;
+        }
+
+        /**
+         * Updates a specific progress bar visually.
+         */
+        function updateProgressBar(skill, percentage) {
+            const progressElement = document.getElementById(`progress-${skill.replace(/\s/g, '-')}`);
+            if (progressElement) {
+                progressElement.style.width = `${percentage}%`;
+                progressElement.classList.remove('bg-gray-300', 'bg-indigo-500', 'bg-green-500');
+                progressElement.classList.add(percentage === 100 ? 'bg-green-500' : 'bg-indigo-500');
+                progressElement.nextElementSibling.textContent = `${percentage}%`;
+            }
+        }
+
+        /**
+         * Renders the quiz questions to the UI.
+         */
+        function renderQuiz(quizData) {
+            currentQuizData = quizData.questions;
+            const quizContainer = document.getElementById('quiz-container');
+            const questionsList = document.getElementById('quiz-questions-list');
+            
+            document.getElementById('quiz-title').textContent = quizData.title;
+            questionsList.innerHTML = '';
+
+            quizData.questions.forEach((q, index) => {
+                const questionElement = document.createElement('div');
+                questionElement.className = 'p-4 border border-gray-200 rounded-lg bg-gray-50';
+                questionElement.innerHTML = `
+                    <p class="text-lg font-semibold text-gray-800 mb-3">Q${q.questionNumber}: ${q.question}</p>
+                    <p class="text-xs text-indigo-500 mb-3">Topic: ${q.topic}</p>
+                    <div id="options-${index}" class="space-y-2">
+                        ${q.answerOptions.map((option, optIndex) => `
+                            <div data-question="${index}" data-option="${optIndex}" class="quiz-option p-3 border border-gray-300 rounded-lg bg-white text-gray-700" onclick="selectOption(this)">
+                                ${option.text}
+                            </div>
+                        `).join('')}
+                    </div>
+                    <p id="rationale-${index}" class="mt-3 text-sm italic text-gray-600 hidden"></p>
+                    <p class="mt-2 text-sm font-medium text-gray-500 cursor-pointer" onclick="showHint(this, '${q.hint}')">Show Hint</p>
+                `;
+                questionsList.appendChild(questionElement);
+            });
+
+            quizContainer.classList.remove('hidden');
+            document.getElementById('quiz-cta').classList.add('hidden');
+            document.getElementById('submit-quiz-button').classList.remove('hidden');
+            document.getElementById('download-pdf-button').classList.add('hidden');
+            document.getElementById('quiz-results-container').classList.add('hidden');
+        }
+
+        window.selectOption = function(element) {
+            const questionIndex = element.getAttribute('data-question');
+            const optionsContainer = document.getElementById(`options-${questionIndex}`);
+            
+            // Deselect all options for this question
+            optionsContainer.querySelectorAll('.quiz-option').forEach(opt => {
+                opt.classList.remove('selected');
+            });
+            
+            // Select the clicked option
+            element.classList.add('selected');
+        }
+
+        window.showHint = function(buttonElement, hintText) {
+            buttonElement.textContent = `Hint: ${hintText}`;
+            buttonElement.classList.remove('cursor-pointer');
+            buttonElement.onclick = null;
+        }
+
+        /**
+         * Handles quiz submission, scoring, and progress update.
+         */
+        window.submitQuiz = function() {
+            if (!currentQuizData) return;
+
+            document.getElementById('submit-quiz-button').disabled = true;
+            document.getElementById('submit-quiz-button').textContent = 'Calculating Score...';
+            
+            let totalCorrect = 0;
+            const topicScores = {}; // {topic: {correct: 0, total: 0}}
+            const rationaleOutput = document.getElementById('rationale-output');
+            rationaleOutput.innerHTML = '';
+            
+            currentQuizData.forEach((q, qIndex) => {
+                const questionElement = document.getElementById(`options-${qIndex}`);
+                const selectedOption = questionElement.querySelector('.quiz-option.selected');
+                
+                const questionTopic = q.topic;
+                if (!topicScores[questionTopic]) {
+                    topicScores[questionTopic] = { correct: 0, total: 0 };
+                }
+                topicScores[questionTopic].total++;
+                
+                const questionScoreDiv = document.createElement('div');
+                questionScoreDiv.className = 'p-3 rounded-lg border';
+                questionScoreDiv.innerHTML = `<h4 class="font-bold text-lg mb-2">Q${q.questionNumber}: ${q.question}</h4>`;
+                
+                q.answerOptions.forEach((option, optIndex) => {
+                    const optionElement = questionElement.querySelector(`[data-option="${optIndex}"]`);
+                    optionElement.onclick = null; // Disable further clicking
+
+                    if (option.isCorrect) {
+                        optionElement.classList.add('correct-answer');
+                        
+                        questionScoreDiv.classList.add('border-green-400', 'bg-green-50');
+                        questionScoreDiv.innerHTML += `<p class="text-sm mt-1 text-green-700 font-semibold">Correct Answer Rationale:</p><p class="text-xs text-green-700">${option.rationale}</p>`;
+
+                        if (selectedOption && optionElement === selectedOption) {
+                            totalCorrect++;
+                            topicScores[questionTopic].correct++;
+                        }
+                    } else if (selectedOption && optionElement === selectedOption) {
+                        optionElement.classList.add('incorrect-answer');
+                        questionScoreDiv.classList.add('border-red-400', 'bg-red-50');
+                        questionScoreDiv.innerHTML += `<p class="text-sm mt-1 text-red-700 font-semibold">Your Selection Rationale:</p><p class="text-xs text-red-700">${option.rationale}</p>`;
+                    }
+                    
+                });
+
+                rationaleOutput.appendChild(questionScoreDiv);
+            });
+            
+            // Calculate total score percentage
+            const totalQuestions = currentQuizData.length;
+            const overallScore = Math.round((totalCorrect / totalQuestions) * 100);
+            
+            // Update progress bars based on topic scores
+            for (const topic in topicScores) {
+                const score = topicScores[topic];
+                const percentage = Math.round((score.correct / score.total) * 100);
+                
+                // For this prototype, we'll map the quiz topic score to the corresponding *missing* skill.
+                // Since the LLM creates the topics based on the missing skills, we just update all missing skills
+                // with the overall score for simplicity, or we could find the best match for the progress data.
+                
+                // Let's update the missing skills in the progressData with the overall score.
+                for (const skillName in progressData) {
+                    if (progressData[skillName] < 100) { // Only update skills that were missing
+                        progressData[skillName] = overallScore;
+                        updateProgressBar(skillName, overallScore);
+                    }
+                }
+            }
+            
+            document.getElementById('quiz-results-container').classList.remove('hidden');
+            document.getElementById('quiz-container').classList.add('hidden');
+            document.getElementById('download-pdf-button').classList.remove('hidden');
+            document.getElementById('submit-quiz-button').textContent = 'Score: ' + overallScore + '% (Quiz Complete)';
+            document.getElementById('submit-quiz-button').disabled = true;
+            
+            // Scroll to the comparison section to see the updated bars
+            document.getElementById('results-container').scrollIntoView({ behavior: 'smooth' });
+        }
+
+
+        /**
+         * Step 1: Analyze the job role and user skills using a structured JSON response.
+         */
+        async function getAnalysisData(jobRole, userInput) {
+            const analysisSchema = {
+                type: "OBJECT",
+                properties: {
+                    "jobRole": { "type": "STRING", "description": "The exact job role provided." },
+                    "requiredSkills": {
+                        "type": "ARRAY",
+                        "description": "A list of 5 to 7 key skills and knowledge areas required for this specific job role.",
+                        "items": { "type": "STRING" }
+                    },
+                    "extractedUserSkills": {
+                        "type": "ARRAY",
+                        "description": "A list of all technical and soft skills and knowledge areas explicitly mentioned in the user input.",
+                        "items": { "type": "STRING" }
+                    }
+                },
+                "propertyOrdering": ["jobRole", "requiredSkills", "extractedUserSkills"]
+            };
+
+            const userQuery = `You are a career analysis engine. Analyze the following job role and candidate profile.
+            Job Role: "${jobRole}"
+            Candidate Profile: "${userInput}"
+
+            Based on this, STRICTLY output a JSON object:
+            1. 'requiredSkills': List 5-7 core skills for the Job Role (e.g., Abstract Algebra, Real Analysis, Effective Pedagogy).
+            2. 'extractedUserSkills': List all relevant skills the candidate explicitly mentions.`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: analysisSchema
+                },
+                tools: [{ "google_search": {} }],
+            };
+
+            const url = `${API_URL_BASE}?key=${apiKey}`;
+            const response = await fetchWithRetry(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+            const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+            if (!jsonText) {
+                throw new Error("API failed to return structured content.");
+            }
+
+            try {
+                return JSON.parse(jsonText);
+            } catch (e) {
+                console.error("Failed to parse JSON response:", jsonText);
+                throw new Error("Invalid JSON structure returned from the model.");
+            }
+        }
+
+        /**
+         * Step 2: Generate quiz content for the missing skills.
+         */
+        async function generateQuizContent(jobRole, missingSkills) {
+            const quizSchema = {
+                type: "OBJECT",
+                properties: {
+                    "title": { "type": "STRING", "description": "A relevant title for the quiz, e.g., 'Core Competency Assessment for [JobRole]'" },
+                    "questions": {
+                        "type": "ARRAY",
+                        "description": "A list of 10 multiple-choice questions with 4 options each, focusing on the missing skills.",
+                        "items": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "questionNumber": { "type": "INTEGER" },
+                                "topic": { "type": "STRING", "description": "The specific missing skill/topic this question relates to (e.g., Abstract Algebra, Real Analysis, Pedagogy)." },
+                                "question": { "type": "STRING", "description": "The question text. Use LaTeX formatting for math." },
+                                "answerOptions": {
+                                    "type": "ARRAY",
+                                    "items": {
+                                        "type": "OBJECT",
+                                        "properties": {
+                                            "text": { "type": "STRING", "description": "The answer option text. Use LaTeX formatting for math." },
+                                            "rationale": { "type": "STRING", "description": "A short explanation of why this option is correct or incorrect, focusing on the underlying concept." },
+                                            "isCorrect": { "type": "BOOLEAN" }
+                                        },
+                                        "required": ["text", "rationale", "isCorrect"]
+                                    }
+                                },
+                                "hint": { "type": "STRING", "description": "A short, non-revealing hint to guide the user's thinking." }
+                            },
+                            "required": ["questionNumber", "topic", "question", "answerOptions", "hint"]
+                        }
+                    }
+                },
+                "required": ["title", "questions"]
+            };
+
+            const userQuery = `You are a quiz generation engine. The user wants to be a ${jobRole}. They are missing the following key skills: ${missingSkills.join(', ')}. Generate a 10-question multiple-choice quiz (4 options per question) to test foundational to intermediate knowledge in these specific missing areas. 
+            
+            Ensure the questions vary in difficulty. For the answer options, make sure only ONE is marked 'isCorrect'.
+            
+            **CRITICAL**: All mathematical notation, symbols, or equations must be enclosed in LaTeX delimiters ($...$ or $$...$$) and all backslashes must be escaped with an additional backslash (e.g., \\frac{a}{b}).`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: quizSchema
+                },
+                tools: [{ "google_search": {} }],
+            };
+
+            const url = `${API_URL_BASE}?key=${apiKey}`;
+            const response = await fetchWithRetry(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+            const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+            if (!jsonText) {
+                throw new Error("API failed to return structured quiz content.");
+            }
+
+            try {
+                return JSON.parse(jsonText);
+            } catch (e) {
+                console.error("Failed to parse JSON quiz response:", jsonText);
+                throw new Error("Invalid JSON structure for quiz returned from the model.");
+            }
+        }
+
+        /**
+         * Main function to analyze user input and provide placement advice.
+         */
+        async function analyzePlacement() {
+            const jobRole = document.getElementById('job-role').value.trim();
+            const userInput = document.getElementById('user-input').value.trim();
+            const resultsContainer = document.getElementById('results-container');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const analyzeButton = document.getElementById('analyze-button');
+            const quizContainer = document.getElementById('quiz-container');
+            const quizCta = document.getElementById('quiz-cta');
+            const downloadButton = document.getElementById('download-pdf-button');
+            const quizResultsContainer = document.getElementById('quiz-results-container');
+
+            if (!jobRole || !userInput) {
+                alertUser("Please enter both a target job role and your skills/background.");
+                return;
+            }
+
+            resultsContainer.classList.add('hidden');
+            quizContainer.classList.add('hidden');
+            quizResultsContainer.classList.add('hidden');
+            downloadButton.classList.add('hidden');
+            quizCta.classList.add('hidden');
+
+            loadingIndicator.classList.remove('hidden');
+            analyzeButton.disabled = true;
+            document.getElementById('button-text').textContent = 'Analyzing...';
+            document.getElementById('button-icon').classList.add('animate-pulse');
+            document.getElementById('button-icon').innerHTML = `<div class="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>`;
+
+
+            try {
+                const analysis = await getAnalysisData(jobRole, userInput);
+                const required = new Set(analysis.requiredSkills.map(s => s.toLowerCase().trim()));
+                const possessed = new Set(analysis.extractedUserSkills.map(s => s.toLowerCase().trim()));
+
+                // Filter required skills to find actual missing skills not already in progressData (to avoid re-quizzing)
+                const missingSkills = analysis.requiredSkills.filter(requiredSkill => {
+                    const skillLower = requiredSkill.toLowerCase().trim();
+                    const isMissing = !analysis.extractedUserSkills.some(userSkill => 
+                        userSkill.toLowerCase().includes(skillLower) || 
+                        skillLower.includes(userSkill.toLowerCase())
+                    );
+                    return isMissing; 
+                });
+
+                // Render the comparison with initial or existing progress scores
+                renderComparison(jobRole, analysis.requiredSkills, analysis.extractedUserSkills);
+                resultsContainer.classList.remove('hidden');
+
+                if (missingSkills.length === 0 || missingSkills.length < analysis.requiredSkills.length / 2) {
+                    // Excellent Match logic (if no substantial gap)
+                    document.getElementById('comparison-output').innerHTML += `
+                        <div class="mt-6 p-4 bg-green-100 border border-green-300 rounded-lg">
+                            <p class="text-xl font-bold text-green-700">🎉 Excellent Match!</p>
+                            <p class="mt-2 text-green-600">You possess a strong foundation of the required skills for the **${jobRole}** role. You are ready to apply!</p>
+                        </div>
+                    `;
+                    downloadButton.classList.remove('hidden');
+                } else {
+                    // Skills Gap logic - Prepare and render the quiz
+                    quizCta.classList.remove('hidden');
+                    
+                    const quizData = await generateQuizContent(jobRole, missingSkills);
+                    renderQuiz(quizData);
+                }
+
+            } catch (error) {
+                console.error("Analysis failed:", error);
+                alertUser(`An error occurred during analysis or quiz generation. Please try again. Details: ${error.message}`);
+            } finally {
+                loadingIndicator.classList.add('hidden');
+                analyzeButton.disabled = false;
+                document.getElementById('button-text').textContent = 'Analyze My Fit';
+                document.getElementById('button-icon').classList.remove('animate-pulse');
+                document.getElementById('button-icon').innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>`;
+            }
+        }
+        
+        // PDF function remains the same
+        function downloadPDF() {
+            const mainContent = document.querySelector('.w-full.max-w-4xl');
+
+            const options = {
+                margin: 1,
+                filename: `Career_Analysis_Report.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, logging: false, useCORS: true },
+                jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+            };
+
+            const pdfContent = mainContent.cloneNode(true);
+            
+            // Clean up elements that shouldn't be in the PDF
+            pdfContent.querySelector('header').remove(); // Remove header from PDF output
+            pdfContent.querySelector('#analyze-button').remove(); // Remove button
+            pdfContent.querySelector('#download-pdf-button').remove(); // Remove button
+            pdfContent.querySelector('#quiz-cta')?.remove(); // Remove CTA if present
+            pdfContent.querySelector('#loading-indicator')?.remove(); // Remove loading if somehow present
+
+            // Remove input fields, but keep the results
+            pdfContent.querySelector('#job-role').parentNode.innerHTML = `<p class="text-lg font-semibold">${document.getElementById('job-role').value.trim()}</p>`;
+            pdfContent.querySelector('#user-input').parentNode.innerHTML = `<p class="text-gray-700">${document.getElementById('user-input').value.trim()}</p>`;
+            
+            html2pdf().from(pdfContent).set(options).save();
+        }
+
+        function alertUser(message) {
+            const customAlert = document.createElement('div');
+            customAlert.className = "fixed top-5 left-1/2 transform -translate-x-1/2 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg shadow-lg z-50 transition-opacity duration-300";
+            customAlert.textContent = message;
+            document.body.appendChild(customAlert);
+            setTimeout(() => {
+                customAlert.style.opacity = '0';
+                setTimeout(() => customAlert.remove(), 300);
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

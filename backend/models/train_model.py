@@ -6,16 +6,16 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score, roc_auc_score, f1_score
 from sklearn.exceptions import ConvergenceWarning
 import joblib
-import os
+from pathlib import Path
 import warnings
 import pandas as pd 
 
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
-# FIX: Use the exact absolute path for saving/loading
-MODEL_DIR = r'C:\code crafters\backend\models' 
-PROCESSED_DATA_PATH = os.path.join(MODEL_DIR, 'processed_data.csv')
-MODEL_SAVE_PATH = os.path.join(MODEL_DIR, 'model.pkl')
+# Resolve model/data paths relative to this file (backend/models)
+MODEL_DIR = Path(__file__).resolve().parent
+PROCESSED_DATA_PATH = MODEL_DIR / 'processed_data.csv'
+MODEL_SAVE_PATH = MODEL_DIR / 'model.pkl'
 
 def train_and_compare_models():
     """
@@ -81,7 +81,7 @@ def train_and_compare_models():
 
     # 6. Save the Best Model (Saves to the fixed absolute path)
     best_model = results[best_model_name]['Model']
-    joblib.dump(best_model, MODEL_SAVE_PATH)
+    joblib.dump(best_model, str(MODEL_SAVE_PATH))
     
     print(f"\nSelected Model: {best_model_name} (ROC AUC: {best_roc_auc:.4f})")
     print(f"The final predictor model has been saved to '{MODEL_SAVE_PATH}'")

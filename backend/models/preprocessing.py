@@ -2,29 +2,28 @@ import streamlit as st
 import joblib
 import pandas as pd
 import numpy as np
-import os # Added for path handling
-
-# Define the relative path to the models folder
-MODEL_DIR = r'C:\code crafters\backend\models'
+from pathlib import Path
 
 # --- 1. Load Artifacts ---
 @st.cache_resource
 def load_artifacts():
     """Loads the trained model and the preprocessor."""
     
-    # NEW: Use os.path.join to construct platform-independent paths
-    model_path = os.path.join(MODEL_DIR, 'model.pkl')
-    preprocessor_path = os.path.join(MODEL_DIR, 'preprocessor.pkl')
+    # Resolve model directory relative to this file (backend/models)
+    MODEL_DIR = Path(__file__).resolve().parent
+    model_path = MODEL_DIR / 'model.pkl'
+    preprocessor_path = MODEL_DIR / 'preprocessor.pkl'
     
     try:
         model = joblib.load(model_path)
         preprocessor = joblib.load(preprocessor_path)
         return model, preprocessor
     except FileNotFoundError:
-        # NEW: Improved error message with checked paths
-        st.error(f"Model or Preprocessor file not found.")
-        st.info(f"The application checked for files in the **'{MODEL_DIR}'** folder: `{model_path}` and `{preprocessor_path}`.")
-        st.info("Please ensure you have successfully run `data_processor.py` and `model_trainer.py` and that they created the files in the correct location.")
+        # Improved error message with checked paths
+        st.error("Model or Preprocessor file not found.")
+        st.info(f"The application checked for files in: `{MODEL_DIR}`")
+        st.info(f"Paths checked:\n - {model_path}\n - {preprocessor_path}")
+        st.info("Please ensure you have successfully run the data processing and model training steps and that they created the files in the correct location.")
         return None, None
 
 model, preprocessor = load_artifacts()

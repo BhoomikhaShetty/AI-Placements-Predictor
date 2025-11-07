@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Placement Officer Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTML2PDF library for download -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; }
+        .card { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08); }
+        /* Custom scrollbar for recommendation output */
+        #results-container::-webkit-scrollbar { width: 8px; }
+        #results-container::-webkit-scrollbar-thumb { background-color: #10b981; border-radius: 4px; }
+        #results-container::-webkit-scrollbar-track { background: #d1fae5; }
+        .match-score { transition: color 0.3s, transform 0.3s; }
+    </style>
+</head>
+<body class="p-4 md:p-8 min-h-screen flex items-center justify-center">
+
+    <div class="w-full max-w-5xl">
+        <header class="text-center mb-10">
+            <h1 class="text-4xl font-extrabold text-gray-800 tracking-tight">Placement Officer Career Portal</h1>
+            <p class="text-lg text-gray-500 mt-2">Analyze student readiness, identify skill gaps, and suggest best-fit career paths.</p>
+        </header>
+
+        <div class="card bg-white p-6 md:p-10 rounded-3xl border border-gray-100">
+
+            <div class="space-y-6">
+                <!-- Target Job Role Input -->
+                <div>
+                    <label for="job-role" class="block text-sm font-medium text-gray-700 mb-2">Student's Target Job Role</label>
+                    <input type="text" id="job-role" placeholder="e.g., Math Lecturer" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 transition duration-150" value="Math Lecturer">
+                </div>
+            </div>
+
+            <div class="mt-6">
+                <label for="user-input" class="block text-sm font-medium text-gray-700 mb-2">Student's Skills and Background</label>
+                <textarea id="user-input" rows="5" placeholder="e.g., Proficient in probability, graph theory, and abstract algebra. 5 years of university teaching experience. Fluent in Python/NumPy." class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 transition duration-150 resize-none">I am proficient in probability, linear algebra, and discrete mathematics. I also have basic knowledge of differential equations.</textarea>
+            </div>
+
+            <button id="analyze-button" class="w-full mt-8 py-3 px-6 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition duration-200 focus:outline-none focus:ring-4 focus:ring-emerald-500 focus:ring-opacity-50 flex items-center justify-center" onclick="analyzePlacement()">
+                <svg id="button-icon" class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                <span id="button-text">Analyze Placement Potential</span>
+            </button>
+
+            <div id="loading-indicator" class="mt-8 hidden text-center">
+                <div class="animate-spin inline-block w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full"></div>
+                <p class="mt-2 text-emerald-600 font-medium">Analyzing skills and generating dual recommendations...</p>
+            </div>
+
+            <!-- Analysis Results Container -->
+            <div id="results-container" class="mt-10 p-6 bg-emerald-50 border border-emerald-200 rounded-xl hidden max-h-[600px] overflow-y-auto">
+                <h2 id="results-title" class="text-2xl font-bold text-emerald-800 mb-4 border-b pb-2">Comprehensive Analysis Report</h2>
+                
+                <div id="comparison-output" class="mb-6 text-gray-700">
+                    <!-- Dynamic content inserted here -->
+                </div>
+                
+                <div id="recommendation-output" class="text-gray-800 leading-relaxed">
+                    <!-- Dynamic content inserted here -->
+                </div>
+            </div>
+            
+            <button id="download-pdf-button" class="w-full mt-4 py-3 px-6 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition duration-200 focus:outline-none focus:ring-4 focus:ring-red-500 focus:ring-opacity-50 flex items-center justify-center hidden" onclick="downloadPDF()">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Download Analysis as PDF
+            </button>
+
+        </div>
+    </div>
+
+    <script>
+        const API_URL_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent';
+        
+        // Global variable for Canvas environment (NOTE: This must be an empty string if not provided by the environment)
+        const apiKey = typeof __api_key !== 'undefined' ? __api_key : "AIzaSyCOTvp9jKWFvNgaVuAeLslgrxqJ9Jh3Z8c"; 
+
+        // --- Utility Functions ---
+
+        /**
+         * Executes a fetch request with exponential backoff for retries.
+         */
+        async function fetchWithRetry(url, options, retries = 3) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.ok) {
+                        return response;
+                    }
+                    if (response.status === 429 && i < retries - 1) { // Too Many Requests
+                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue;
+                    }
+                    throw new Error(`API request failed with status ${response.status}: ${response.statusText}`);
+                } catch (error) {
+                    if (i === retries - 1) {
+                        console.error("Fetch failed after all retries:", error);
+                        throw error;
+                    }
+                    const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+
+        /**
+         * Converts text to a friendly unordered list HTML structure.
+         */
+        function textToHtmlList(text) {
+            const items = text.split('\n').filter(line => line.trim().length > 0);
+            let html = '<ul class="list-disc list-inside space-y-1">';
+            items.forEach(item => {
+                let cleanItem = item.trim().replace(/^[\*\-\d\.\s]+/, '');
+                if (cleanItem) {
+                    html += `<li class="ml-4">${cleanItem}</li>`;
+                }
+            });
+            html += '</ul>';
+            return html;
+        }
+
+        /**
+         * Generates the PDF report of the analysis.
+         */
+        function downloadPDF() {
+            const resultsContainer = document.getElementById('results-container');
+            const jobRole = document.getElementById('job-role').value.trim();
+
+            const options = {
+                margin: 0.5,
+                filename: `Placement_Analysis_${jobRole.replace(/\s/g, '_')}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, logging: false, useCORS: true },
+                jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+            };
+
+            const pdfContent = resultsContainer.cloneNode(true);
+            pdfContent.classList.remove('hidden');
+            pdfContent.style.maxHeight = 'none';
+            pdfContent.style.overflow = 'visible';
+            
+            // Apply PDF specific styling (e.g., removing max-height for full content rendering)
+            const originalMaxHeight = resultsContainer.style.maxHeight;
+            resultsContainer.style.maxHeight = 'none';
+            resultsContainer.style.overflow = 'visible';
+            
+            // Use a slight delay to ensure the DOM updates before PDF creation
+            setTimeout(() => {
+                html2pdf().from(resultsContainer).set(options).save().then(() => {
+                    // Restore original styles after PDF generation
+                    resultsContainer.style.maxHeight = originalMaxHeight;
+                    resultsContainer.style.overflow = 'auto';
+                });
+            }, 50);
+        }
+
+        // --- Core Application Logic ---
+
+        /**
+         * Step 1: Analyze the job role and user skills using a structured JSON response.
+         */
+        async function getAnalysisData(jobRole, userInput) {
+            const analysisSchema = {
+                type: "OBJECT",
+                properties: {
+                    "jobRole": { "type": "STRING", "description": "The exact job role provided." },
+                    "requiredSkills": {
+                        "type": "ARRAY",
+                        "description": "A list of 5 to 7 key skills and knowledge areas required for this specific job role.",
+                        "items": { "type": "STRING" }
+                    },
+                    "extractedUserSkills": {
+                        "type": "ARRAY",
+                        "description": "A list of all technical and soft skills and knowledge areas explicitly mentioned in the user input.",
+                        "items": { "type": "STRING" }
+                    }
+                },
+                "propertyOrdering": ["jobRole", "requiredSkills", "extractedUserSkills"]
+            };
+
+            const systemInstruction = `You are a career analysis engine. Your task is to extract core requirements for the target job and list the skills explicitly mentioned in the candidate's profile.`;
+            
+            const userQuery = `
+            Job Role: "${jobRole}"
+            Candidate Profile: "${userInput}"
+
+            Based on this, STRICTLY output a JSON object:
+            1. 'requiredSkills': List 5-7 core skills for the Job Role.
+            2. 'extractedUserSkills': List all relevant skills the candidate explicitly mentions.`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemInstruction }] },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: analysisSchema
+                }
+            };
+
+            const url = `${API_URL_BASE}?key=${apiKey}`;
+            const response = await fetchWithRetry(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+            const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+            if (!jsonText) {
+                throw new Error("API failed to return structured content for analysis.");
+            }
+
+            try {
+                return JSON.parse(jsonText);
+            } catch (e) {
+                console.error("Failed to parse JSON response:", jsonText);
+                throw new Error("Invalid JSON structure returned from the model in Step 1.");
+            }
+        }
+
+        /**
+         * Step 2: Generate the final structured recommendation, including the best alternative career path and target match percentage.
+         */
+        async function generateRecommendation(jobRole, missingSkills, allUserSkills) {
+            const recommendationSchema = {
+                type: "OBJECT",
+                properties: {
+                    "introMessage": { "type": "STRING", "description": "A brief, encouraging introductory message about the skills gap for the TARGET job." },
+                    "missingSkillsOverview": { "type": "STRING", "description": "A short summary of the key missing skills for the TARGET job." },
+                    "targetMatchPercentage": { "type": "INTEGER", "description": "The estimated match percentage (0-100) for the TARGET job role, based purely on their existing skills against job requirements." },
+                    "suggestedJobRole": { "type": "STRING", "description": "A specific, highly relevant job role that the student is a better fit for, given their current skills, maximizing immediate placement potential." },
+                    "suggestedMatchPercentage": { "type": "INTEGER", "description": "The estimated match percentage (0-100) for the suggested job role, based purely on their existing skills." },
+                    "courseRecommendations": {
+                        "type": "ARRAY",
+                        "description": "A list of 3-5 specific course recommendations from YouTube or Udemy to address missing skills for the TARGET job.",
+                        "items": {
+                            type: "OBJECT",
+                            properties: {
+                                "title": { "type": "STRING", "description": "Title of the course/video." },
+                                "platform": { "type": "STRING", "description": "Platform (e.g., 'YouTube', 'Udemy')." },
+                                "description": { "type": "STRING", "description": "Brief description of what the course/video covers and how it helps." },
+                                "url": { "type": "STRING", "format": "uri", "description": "Direct URL to a course (only if Udemy), otherwise an empty string." }
+                            },
+                            "required": ["title", "platform", "description"]
+                        }
+                    },
+                    "nextSteps": { "type": "STRING", "description": "Concluding advice on how to proceed after completing courses, focusing on both roles." }
+                },
+                "required": ["introMessage", "missingSkillsOverview", "targetMatchPercentage", "suggestedJobRole", "suggestedMatchPercentage", "courseRecommendations", "nextSteps"]
+            };
+
+            const systemInstruction = `You are a helpful career coach and placement assistant. Your task is two-fold: 
+            1. Analyze the student's profile for their desired job, calculate the match percentage, and recommend courses to close the gap.
+            2. Identify and assign a match percentage (0-100) for the single best alternative job role where their current skills (listed below) offer the highest placement potential.`;
+
+            const userQuery = `
+            Target Job Role: ${jobRole}
+            Missing Skills for Target Job: ${missingSkills.join(', ')}
+            Candidate's ALL Skills: ${allUserSkills.join(', ')}
+
+            Provide a structured JSON response with:
+            - Calculate and include the 'targetMatchPercentage' (0-100) for the TARGET job based on the skills provided.
+            - A 'suggestedJobRole' that maximizes immediate placement potential.
+            - A 'suggestedMatchPercentage' for that alternative role (0-100).
+            - Course recommendations to bridge the gap for the TARGET job.
+            - **CRITICAL**: Only provide a valid, direct 'url' if the 'platform' is Udemy. If the platform is YouTube, the 'url' property must be an empty string.`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemInstruction }] },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: recommendationSchema
+                }
+            };
+
+            const url = `${API_URL_BASE}?key=${apiKey}`;
+            const response = await fetchWithRetry(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+            const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+            if (!jsonText) {
+                throw new Error("API failed to return structured recommendation content.");
+            }
+
+            try {
+                return JSON.parse(jsonText);
+            } catch (e) {
+                console.error("Failed to parse JSON recommendation response:", jsonText);
+                throw new Error("Invalid JSON structure for recommendations returned from the model in Step 2.");
+            }
+        }
+
+        /**
+         * Main function to analyze user input and provide placement advice.
+         */
+        async function analyzePlacement() {
+            const jobRole = document.getElementById('job-role').value.trim();
+            const userInput = document.getElementById('user-input').value.trim();
+            
+            const resultsContainer = document.getElementById('results-container');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const comparisonOutput = document.getElementById('comparison-output');
+            const recommendationOutput = document.getElementById('recommendation-output');
+            const analyzeButton = document.getElementById('analyze-button');
+            const downloadButton = document.getElementById('download-pdf-button');
+
+            if (!jobRole || !userInput) {
+                alertUser("Please ensure both the Target Job Role and Student's Skills are entered.");
+                return;
+            }
+
+            resultsContainer.classList.add('hidden');
+            downloadButton.classList.add('hidden');
+            recommendationOutput.innerHTML = '';
+            comparisonOutput.innerHTML = '';
+            loadingIndicator.classList.remove('hidden');
+            analyzeButton.disabled = true;
+            document.getElementById('button-text').textContent = 'Analyzing...';
+            document.getElementById('button-icon').classList.add('animate-spin');
+            document.getElementById('button-icon').innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m15.356-2h-.582m0 0h-.582"></path>`;
+
+
+            try {
+                // --- Step 1: Get structured skill comparison ---
+                const analysis = await getAnalysisData(jobRole, userInput);
+                
+                const requiredSkillsLower = analysis.requiredSkills.map(s => s.toLowerCase().trim());
+                const possessedSkillsLower = analysis.extractedUserSkills.map(s => s.toLowerCase().trim());
+
+                // Find missing skills by comparing the two lists
+                const missingSkills = analysis.requiredSkills.filter(requiredSkill => {
+                    return !possessedSkillsLower.some(possessed => requiredSkill.toLowerCase().includes(possessed) || possessed.includes(requiredSkill.toLowerCase()));
+                }).slice(0, 5); // Limit to top 5 missing skills for focus
+
+                let finalRecommendationHtml = '';
+                
+                // --- Step 2: Get dual recommendation (Target Gap + Suggested Fit) ---
+                const recommendationData = await generateRecommendation(jobRole, missingSkills, analysis.extractedUserSkills);
+                const targetMatch = recommendationData.targetMatchPercentage; // Retrieve new field
+                
+                // --- Comparison Display ---
+                let comparisonHtml = `
+                    <div class="p-4 bg-gray-100 rounded-lg border border-gray-200 mb-6">
+                        <p class="font-semibold text-lg text-gray-800">Target Job: <span class="text-emerald-600">${analysis.jobRole}</span></p>
+                        
+                        <!-- NEW TARGET MATCH SCORE DISPLAY -->
+                        <div class="mt-2 text-2xl font-extrabold text-gray-800">
+                            Target Job Match Score: 
+                            <span class="match-score ${targetMatch >= 70 ? 'text-green-600' : (targetMatch >= 40 ? 'text-amber-600' : 'text-red-600')}">${targetMatch}%</span>
+                        </div>
+                        <p class="mt-2 text-md text-gray-600">This score reflects the student's existing skills against the job requirements.</p>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="p-3 bg-white rounded-lg border border-gray-200 shadow-sm">
+                            <h3 class="font-semibold text-gray-800 mb-2 border-b pb-1">Required Skills for Target Job</h3>
+                            ${textToHtmlList(analysis.requiredSkills.join('\n'))}
+                        </div>
+                        <div class="p-3 bg-white rounded-lg border border-gray-200 shadow-sm">
+                            <h3 class="font-semibold text-gray-800 mb-2 border-b pb-1">Student's Extracted Skills</h3>
+                            ${textToHtmlList(analysis.extractedUserSkills.join('\n'))}
+                        </div>
+                    </div>
+                `;
+                
+                
+                // --- Suggested Best-Fit Career Path ---
+                const suggestedJobHtml = `
+                    <div class="mt-8 p-4 bg-indigo-100 rounded-lg border border-indigo-300 shadow-md">
+                        <h3 class="text-xl font-bold text-indigo-800 flex items-center mb-2">
+                            <svg class="w-6 h-6 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 14h18M5 17h14M8 10l.776-2.328m4.356 2l.53-1.06a1 1 0 011.018-.621 1 1 0 01.621 1.018l-.53 1.06M21 16V9a2 2 0 00-2-2H5a2 2 0 00-2 2v7"></path></svg>
+                            AI Suggested Best-Fit Career Path
+                        </h3>
+                        <p class="text-lg font-semibold text-indigo-700">${recommendationData.suggestedJobRole}</p>
+                        <p class="mt-1 text-gray-700">Estimated Match based on Current Skills: 
+                            <span class="font-bold text-2xl ${recommendationData.suggestedMatchPercentage >= 75 ? 'text-green-600' : 'text-amber-600'}">${recommendationData.suggestedMatchPercentage}%</span>
+                        </p>
+                        <p class="text-sm text-gray-600 mt-2">This is the role where the student's existing skills offer the highest immediate placement probability.</p>
+                    </div>
+                `;
+
+                // --- Skill Gap & Remediation (for Target Job) ---
+                if (targetMatch < 75) {
+                    comparisonHtml += `<p class="mt-4 text-red-600 font-semibold">⚠️ The target match score is ${targetMatch}%. A remediation plan is suggested below.</p>`;
+                    
+                    let coursesHtml = recommendationData.courseRecommendations.map(course => {
+                        let linkUrl;
+                        let buttonText;
+                        
+                        if (course.platform.toLowerCase() === 'udemy' && course.url && course.url.trim().length > 5) {
+                            linkUrl = course.url.trim();
+                            buttonText = `View Udemy Course`;
+                        } else if (course.platform.toLowerCase() === 'youtube') {
+                            linkUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(course.title)}`;
+                            buttonText = `Search on YouTube`;
+                        } else {
+                            linkUrl = `https://www.google.com/search?q=${encodeURIComponent(course.title + ' ' + course.platform)}`;
+                            buttonText = `Search for Course`;
+                        }
+                        
+                        return `
+                            <div class="mb-3 p-3 bg-white rounded-lg border border-emerald-200 shadow-sm">
+                                <h4 class="font-semibold text-emerald-800">${course.title} (<span class="text-sm font-normal">${course.platform}</span>)</h4>
+                                <p class="text-gray-700 text-sm mt-1">${course.description}</p>
+                                <a href="${linkUrl}" target="_blank" rel="noopener noreferrer" class="text-emerald-600 hover:bg-emerald-700 hover:text-white transition duration-200 text-xs font-medium mt-2 py-1 px-2 rounded-full bg-emerald-100 inline-flex items-center">
+                                    ${buttonText} 
+                                    <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                                </a>
+                            </div>
+                        `;
+                    }).join('');
+
+                    finalRecommendationHtml = `
+                        <p class="text-xl font-bold text-red-700 border-b pb-2">Target Job Readiness</p>
+                        <p class="mt-3">${recommendationData.introMessage}</p>
+                        <p class="mt-2 text-gray-700">${recommendationData.missingSkillsOverview}</p>
+                        <h3 class="text-lg font-bold text-emerald-800 mt-5 mb-3">Skill Remediation Plan:</h3>
+                        <div class="space-y-4">
+                            ${coursesHtml}
+                        </div>
+                    `;
+                } else {
+                    // High Match Score (75% or higher)
+                    finalRecommendationHtml = `
+                        <p class="text-xl font-bold text-green-700">🎉 Strong Alignment!</p>
+                        <p class="mt-3">The student has an excellent **${targetMatch}%** match score for the **${jobRole}** role. Their current skill set is highly competitive. Focus should now shift to soft skills, experience demonstration, and interview preparation.</p>
+                    `;
+                }
+                
+                // Final assembly
+                comparisonOutput.innerHTML = comparisonHtml + suggestedJobHtml;
+                recommendationOutput.innerHTML = finalRecommendationHtml + `
+                    <h3 class="text-lg font-bold text-emerald-800 mt-8 mb-3 border-t pt-4">Actionable Next Steps:</h3>
+                    <p class="text-gray-700">${recommendationData.nextSteps}</p>
+                `;
+
+                resultsContainer.classList.remove('hidden');
+                downloadButton.classList.remove('hidden');
+
+            } catch (error) {
+                console.error("Analysis failed:", error);
+                alertUser(`An error occurred during analysis. Please check your inputs and try again. ${error.message}`);
+            } finally {
+                loadingIndicator.classList.add('hidden');
+                analyzeButton.disabled = false;
+                document.getElementById('button-text').textContent = 'Analyze Placement Potential';
+                document.getElementById('button-icon').classList.remove('animate-spin');
+                document.getElementById('button-icon').innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>`;
+            }
+        }
+
+        function alertUser(message) {
+            const customAlert = document.createElement('div');
+            customAlert.className = "fixed top-5 left-1/2 transform -translate-x-1/2 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg shadow-lg z-50 transition-opacity duration-300";
+            customAlert.textContent = message;
+            document.body.appendChild(customAlert);
+            setTimeout(() => {
+                customAlert.style.opacity = '0';
+                customAlert.classList.add('opacity-0');
+                setTimeout(() => customAlert.remove(), 300);
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
